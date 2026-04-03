@@ -1,0 +1,31 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.1
+
+# Validation / settings
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# Task queue
+dramatiq[redis]==1.17.1
+
+# HTTP client (recipe fetching)
+httpx==0.28.1
+
+# HTML parsing (fallback)
+beautifulsoup4==4.12.3
+lxml==5.3.0
+
+# LLM — Gemini
+google-genai==1.14.0
+
+# iCal export
+icalendar==6.1.1
+
+# Redis client
+redis==5.2.1
