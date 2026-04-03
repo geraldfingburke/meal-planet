@@ -30,6 +30,8 @@ class GeminiRecipeOutput(BaseModel):
     instructions: str
     base_servings: int
     image_url: str | None = None
+    category: str = "any"
+    tags: list[str] = []
     ingredients: list[GeminiIngredient]
 
 
@@ -50,6 +52,8 @@ class ParsedRecipe:
     source_url: str
     base_servings: int
     image_url: str | None
+    category: str
+    tags: list[str]
     ingredients: list[ParsedIngredient]
 
 
@@ -65,6 +69,8 @@ Return ONLY a JSON object that matches this exact schema (no markdown, no commen
   "instructions": "string - numbered steps, one per line",
   "base_servings": integer,
   "image_url": "string or null - the main recipe/hero image URL from og:image meta tag, or the largest recipe photo src. Must be an absolute URL.",
+  "category": "string - one of: breakfast, lunch, dinner, dessert, any",
+  "tags": ["string - at least 3 descriptive tags for this recipe, e.g. 'quick', 'chicken', 'healthy', 'comfort food', 'vegetarian', 'spicy'"],
   "ingredients": [
     {
       "name": "string - the ingredient name, lowercase, singular where sensible",
@@ -80,6 +86,8 @@ Rules:
 - If no serving count is found, default to 4.
 - Keep ingredient names clean (no quantities or units in the name).
 - walmart_search_term should prefer 'Great Value' brand when a store-brand equivalent exists.
+- category: Determine the most appropriate meal category. Use "breakfast" for morning meals, "lunch" for midday, "dinner" for evening/main courses, "dessert" for sweets, "any" if it could fit multiple categories.
+- tags: Provide at least 3 tags. Include cuisine type, protein, cooking method, dietary info, or other descriptors.
 """
 
 
@@ -120,6 +128,8 @@ async def parse_recipe_from_url(url: str) -> ParsedRecipe:
         source_url=url,
         base_servings=parsed.base_servings,
         image_url=parsed.image_url,
+        category=parsed.category if parsed.category in ("breakfast", "lunch", "dinner", "dessert", "any") else "any",
+        tags=parsed.tags if len(parsed.tags) >= 3 else parsed.tags + ["homemade", "recipe", "meal"][:3 - len(parsed.tags)],
         ingredients=[
             ParsedIngredient(
                 name=ing.name,

@@ -1,7 +1,8 @@
 import json
+import uuid
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -11,18 +12,12 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
+from app.models.grocery_archive import GroceryListArchive
 from app.models.meal_plan import MealPlan
 from app.models.recipe import Recipe, RecipeIngredient
-from app.models.week_config import WeekConfig
+from app.services.family_service import get_default_family_id
 
 router = APIRouter()
-
-DEFAULT_SERVING_OVERRIDE = 4  # Boy Week default
-
-
-def _get_week_start(d: date) -> date:
-    """Return Monday of the week containing the given date."""
-    return d - timedelta(days=d.weekday())
 
 
 # -- Pydantic schemas for Gemini grocery output --------------------
@@ -99,40 +94,7 @@ async def generate_grocery_list(
     data: GroceryGenerateRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # 1. Load week configs for every week in the range
-    all_week_starts: set[date] = set()
-    d = data.start_date
-    while d <= data.end_date:
-        all_week_starts.add(_get_week_start(d))
-        d += timedelta(days=7)
-    # Also catch the last partial week
-    all_week_starts.add(_get_week_start(data.end_date))
-
-    wc_stmt = select(WeekConfig).where(
-        WeekConfig.week_start_date.in_(list(all_week_starts))
-    )
-    wc_result = await db.execute(wc_stmt)
-    week_configs = {wc.week_start_date: wc for wc in wc_result.scalars().all()}
-
-    # Build a lookup: date -> serving_override
-    def servings_for_date(d: date) -> tuple[int, str]:
-        ws = _get_week_start(d)
-        wc = week_configs.get(ws)
-        if wc:
-            return wc.serving_override, wc.week_type
-        return DEFAULT_SERVING_OVERRIDE, "Boy Week"
-
-    # Build week summary for response
-    weeks_summary = []
-    for ws in sorted(all_week_starts):
-        wc = week_configs.get(ws)
-        weeks_summary.append({
-            "week_start": ws.isoformat(),
-            "week_type": wc.week_type if wc else "Boy Week",
-            "servings": wc.serving_override if wc else DEFAULT_SERVING_OVERRIDE,
-        })
-
-    # 2. Get all meal plan entries in the date range with full recipe data
+    # 1. Get all meal plan entries in the date range with full recipe data
     stmt = (
         select(MealPlan)
         .options(
@@ -149,16 +111,14 @@ async def generate_grocery_list(
         return {
             "start_date": data.start_date.isoformat(),
             "end_date": data.end_date.isoformat(),
-            "weeks": weeks_summary,
             "recipes_included": [],
             "items": [],
             "estimated_total": 0.0,
             "recipe_cost_total": 0.0,
         }
 
-    # 3. Build recipe ingredient data for Gemini, scaled per meal plan entry's week
-    #    A recipe can appear multiple times (different days, different weeks, different servings)
-    recipes_data = []  # one entry per unique (recipe_id, servings) combo
+    # 2. Build recipe ingredient data, scaled per meal entry's servings
+    recipes_data = []
     recipe_cost_total = 0.0
     recipes_included = []
     seen_recipe_ids = set()
@@ -168,7 +128,7 @@ async def generate_grocery_list(
 
     for plan in meal_plans:
         recipe = plan.recipe
-        plan_servings, _ = servings_for_date(plan.planned_date)
+        plan_servings = plan.servings
         rid = str(recipe.id)
 
         if rid in recipe_servings_map:
@@ -210,9 +170,8 @@ async def generate_grocery_list(
         if recipe.cost_per_serving:
             recipe_cost_total += float(recipe.cost_per_serving) * total_servings
 
-    # 4. Send to Gemini for smart consolidation
+    # 3. Send to Gemini for smart consolidation
     gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    # Count total unique ingredients across all recipes for the prompt
     all_ingredient_names = set()
     for rd in recipes_data:
         for ing in rd["ingredients"]:
@@ -240,15 +199,97 @@ async def generate_grocery_list(
     )
 
     grocery = SmartGroceryOutput.model_validate_json(gemini_response.text)
-
     estimated_total = round(sum(item.estimated_price for item in grocery.items), 2)
+    recipe_cost_total = round(recipe_cost_total, 2)
+
+    # 4. Persist to archive
+    family_id = await get_default_family_id(db)
+    archive = GroceryListArchive(
+        family_id=family_id,
+        start_date=data.start_date,
+        end_date=data.end_date,
+        items_json=json.dumps([item.model_dump() for item in grocery.items]),
+        recipes_json=json.dumps(recipes_included),
+        estimated_total=estimated_total,
+        recipe_cost_total=recipe_cost_total,
+    )
+    db.add(archive)
+    await db.commit()
+    await db.refresh(archive)
 
     return {
+        "id": str(archive.id),
         "start_date": data.start_date.isoformat(),
         "end_date": data.end_date.isoformat(),
-        "weeks": weeks_summary,
         "recipes_included": recipes_included,
         "items": [item.model_dump() for item in grocery.items],
         "estimated_total": estimated_total,
-        "recipe_cost_total": round(recipe_cost_total, 2),
+        "recipe_cost_total": recipe_cost_total,
+    }
+
+
+@router.get("/latest")
+async def get_latest_grocery_list(db: AsyncSession = Depends(get_db)):
+    """Return the most recently generated grocery list."""
+    stmt = (
+        select(GroceryListArchive)
+        .order_by(GroceryListArchive.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    archive = result.scalar_one_or_none()
+    if not archive:
+        return None
+    return _archive_to_response(archive)
+
+
+@router.get("/archives")
+async def list_grocery_archives(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return older grocery lists (most recent first)."""
+    stmt = (
+        select(GroceryListArchive)
+        .order_by(GroceryListArchive.created_at.desc())
+        .limit(min(limit, 100))
+    )
+    result = await db.execute(stmt)
+    archives = result.scalars().all()
+    return [
+        {
+            "id": str(a.id),
+            "start_date": a.start_date.isoformat(),
+            "end_date": a.end_date.isoformat(),
+            "estimated_total": float(a.estimated_total),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in archives
+    ]
+
+
+@router.get("/archives/{archive_id}")
+async def get_grocery_archive(
+    archive_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a specific archived grocery list."""
+    stmt = select(GroceryListArchive).where(GroceryListArchive.id == archive_id)
+    result = await db.execute(stmt)
+    archive = result.scalar_one_or_none()
+    if not archive:
+        raise HTTPException(status_code=404, detail="Grocery list not found")
+    return _archive_to_response(archive)
+
+
+def _archive_to_response(archive: GroceryListArchive) -> dict:
+    return {
+        "id": str(archive.id),
+        "start_date": archive.start_date.isoformat(),
+        "end_date": archive.end_date.isoformat(),
+        "recipes_included": json.loads(archive.recipes_json),
+        "items": json.loads(archive.items_json),
+        "estimated_total": float(archive.estimated_total),
+        "recipe_cost_total": float(archive.recipe_cost_total),
+        "created_at": archive.created_at.isoformat() if archive.created_at else None,
     }

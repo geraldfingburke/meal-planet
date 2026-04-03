@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, String
+from sqlalchemy import Date, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,7 @@ class MealPlan(Base):
     )
     planned_date: Mapped[date] = mapped_column(Date, nullable=False)
     meal_type: Mapped[str | None] = mapped_column(String(20))
+    servings: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
 
     recipe: Mapped["Recipe"] = relationship(lazy="joined")
 

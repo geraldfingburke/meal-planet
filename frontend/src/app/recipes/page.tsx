@@ -139,10 +139,6 @@ function RecipeCard({
   recipe: Recipe;
   onDelete: (id: string) => void;
 }) {
-  const [servings, setServings] = useState(recipe.base_servings);
-  const toggleServings = () => setServings((s) => (s === 4 ? 6 : 4));
-  const scale = servings / recipe.base_servings;
-
   return (
     <Card className="flex flex-col overflow-hidden">
       {recipe.image_url && (
@@ -166,16 +162,13 @@ function RecipeCard({
       </CardHeader>
       <CardContent className="flex-1 space-y-3">
         <div className="text-sm text-muted-foreground">
-          {recipe.ingredients.length} ingredients ·{" "}
-          <button
-            onClick={toggleServings}
-            className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-primary font-semibold hover:bg-primary/20 transition-colors cursor-pointer"
-            title="Toggle between 4 and 6 servings"
-          >
-            {servings} servings
-          </button>
+          {recipe.ingredients.length} ingredients · {recipe.base_servings}{" "}
+          servings
+          {recipe.category !== "any" && (
+            <span className="capitalize"> · {recipe.category}</span>
+          )}
           {recipe.cost_per_serving != null && (
-            <> · ${(recipe.cost_per_serving * scale).toFixed(2)}/serving</>
+            <> · ${recipe.cost_per_serving.toFixed(2)}/serving</>
           )}
         </div>
         {recipe.tags.length > 0 && (

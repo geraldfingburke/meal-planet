@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -43,6 +44,12 @@ class Recipe(Base):
     source_url: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(Text)
     base_servings: Mapped[int] = mapped_column(Integer, default=4)
+    category: Mapped[str] = mapped_column(
+        String(20),
+        CheckConstraint("category IN ('breakfast', 'lunch', 'dinner', 'dessert', 'any')"),
+        default="any",
+        nullable=False,
+    )
     cost_per_serving: Mapped[float | None] = mapped_column(Numeric(10, 2))
     last_cooked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

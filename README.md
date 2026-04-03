@@ -4,16 +4,20 @@ A self-hosted meal planning and grocery management app that automates recipe imp
 
 Built for a single family. No accounts, no sign-ups. Just deploy with Docker and start planning.
 
+> **New to this?** If you've never used Docker or a terminal before, follow the [step-by-step instructions for non-technical users](INSTRUCTIONS.md).
+
 ## Features
 
-- **Recipe Management** — Create, edit, and browse recipes with ingredients, instructions, and tags.
-- **LLM-Powered Recipe Import** — Paste a URL and Gemini 2.5 Flash extracts a fully structured recipe (ingredients, quantities, units, instructions) automatically.
-- **Weekly Meal Planner** — Drag recipes onto a calendar. Assign meals by date and type (breakfast, lunch, dinner, snack).
-- **Boy Week / Girls Week Toggle** — Switch weekly serving sizes between 4 and 6 servings. Ingredient quantities scale automatically.
-- **Smart Grocery List** — Generates a deduplicated, category-sorted grocery list across all planned meals with unit conversion and intelligent rounding to realistic package sizes.
+- **Recipe Management** — Create, edit, and browse recipes with ingredients, instructions, tags, and category (breakfast, lunch, dinner, dessert, any).
+- **LLM-Powered Recipe Import** — Paste a URL and Gemini 2.5 Flash extracts a fully structured recipe (ingredients, quantities, units, instructions, tags, category) automatically. At least 3 tags are extracted per recipe.
+- **Weekly Meal Planner** — Assign recipes to a calendar by date and type (breakfast, lunch, dinner). Set serving sizes per meal.
+- **Fill Week** — One-click auto-fill for empty meal slots using category-matched recipes and weighted random selection.
+- **Smart Grocery List** — Generates a deduplicated, category-sorted grocery list across all planned meals with unit conversion and intelligent rounding to realistic package sizes. Lists are persisted and can be viewed from an archive.
 - **Walmart Price Estimation** — Gemini estimates prices for each ingredient mapped to Walmart products. Results are cached for 7 days.
 - **Dinner Spinner** — A weighted random recipe picker that favors meals you haven't cooked recently. Filter by tags.
+- **Reports Dashboard** — Spending over time, top 5 most-used recipes, most expensive day, and average spending by grocery category.
 - **iCalendar Export** — Export your meal plan as an `.ics` file for Google Calendar, Outlook, or Apple Calendar.
+- **Tag Editing** — Add, remove, and edit tags directly on any recipe detail page.
 
 ## Tech Stack
 
@@ -32,13 +36,14 @@ Built for a single family. No accounts, no sign-ups. Just deploy with Docker and
 ```
 ┌──────────────────────────────────────────────────────┐
 │               Frontend (Next.js :3000)                │
-│   Dashboard · Planner · Recipes · Spinner · Grocery   │
+│  Dashboard · Planner · Recipes · Spinner · Grocery    │
+│  Reports                                              │
 └────────────────────────┬─────────────────────────────┘
                          │ REST
 ┌────────────────────────┴─────────────────────────────┐
 │               Backend (FastAPI :8000)                  │
 │   /api/recipes · /api/meal-plan · /api/grocery-list   │
-│   /api/week-config · /api/spinner · /api/calendar     │
+│   /api/spinner · /api/calendar · /api/reports         │
 └───────┬──────────────────────────────────┬───────────┘
         │                                  │
         ▼                                  ▼
@@ -103,38 +108,42 @@ Built for a single family. No accounts, no sign-ups. Just deploy with Docker and
 
 ## API Endpoints
 
-| Method   | Path                         | Description                                   |
-| -------- | ---------------------------- | --------------------------------------------- |
-| `GET`    | `/health`                    | Health check                                  |
-| `GET`    | `/api/recipes`               | List recipes (query: `q`, `tag`)              |
-| `GET`    | `/api/recipes/{id}`          | Get recipe details                            |
-| `POST`   | `/api/recipes`               | Create recipe                                 |
-| `PUT`    | `/api/recipes/{id}`          | Update recipe                                 |
-| `DELETE` | `/api/recipes/{id}`          | Delete recipe                                 |
-| `POST`   | `/api/recipes/import`        | Import recipe from URL (async)                |
-| `GET`    | `/api/ingredients`           | List ingredients (query: `q`, `category`)     |
-| `POST`   | `/api/ingredients`           | Create ingredient                             |
-| `GET`    | `/api/meal-plan`             | List meal plan (query: `week_start`)          |
-| `POST`   | `/api/meal-plan`             | Create meal plan entry                        |
-| `PUT`    | `/api/meal-plan/{id}`        | Update meal plan entry                        |
-| `DELETE` | `/api/meal-plan/{id}`        | Delete meal plan entry                        |
-| `GET`    | `/api/week-config`           | Get week serving config (query: `week_start`) |
-| `PUT`    | `/api/week-config`           | Set Boy Week (4) or Girls Week (6)            |
-| `POST`   | `/api/grocery-list/generate` | Generate aggregated grocery list              |
-| `GET`    | `/api/spinner/spin`          | Random weighted recipe (query: `tags`)        |
-| `GET`    | `/api/spinner/tags`          | List available tags                           |
-| `GET`    | `/api/calendar/export.ics`   | Export iCal (query: `start`, `end`)           |
-| `GET`    | `/api/jobs/{id}`             | Check background job status                   |
+| Method   | Path                                    | Description                                 |
+| -------- | --------------------------------------- | ------------------------------------------- |
+| `GET`    | `/health`                               | Health check                                |
+| `GET`    | `/api/recipes`                          | List recipes (query: `q`, `tag`)            |
+| `GET`    | `/api/recipes/{id}`                     | Get recipe details                          |
+| `POST`   | `/api/recipes`                          | Create recipe (with category + tags)        |
+| `PUT`    | `/api/recipes/{id}`                     | Update recipe (title, tags, category, etc.) |
+| `DELETE` | `/api/recipes/{id}`                     | Delete recipe                               |
+| `POST`   | `/api/recipes/import`                   | Import recipe from URL (async)              |
+| `GET`    | `/api/ingredients`                      | List ingredients (query: `q`, `category`)   |
+| `POST`   | `/api/ingredients`                      | Create ingredient                           |
+| `GET`    | `/api/meal-plan`                        | List meal plan (query: `week_start`)        |
+| `POST`   | `/api/meal-plan`                        | Create meal plan entry (with servings)      |
+| `PUT`    | `/api/meal-plan/{id}`                   | Update meal plan entry                      |
+| `DELETE` | `/api/meal-plan/{id}`                   | Delete meal plan entry                      |
+| `POST`   | `/api/meal-plan/fill-week`              | Auto-fill empty slots with matched recipes  |
+| `POST`   | `/api/grocery-list/generate`            | Generate aggregated grocery list            |
+| `GET`    | `/api/grocery-list/latest`              | Get most recent generated list              |
+| `GET`    | `/api/grocery-list/archives`            | List all saved grocery lists                |
+| `GET`    | `/api/grocery-list/archives/{id}`       | Get a specific archived list                |
+| `GET`    | `/api/spinner/spin`                     | Random weighted recipe (query: `tags`)      |
+| `GET`    | `/api/spinner/tags`                     | List available tags                         |
+| `GET`    | `/api/calendar/export.ics`              | Export iCal (query: `start`, `end`)         |
+| `GET`    | `/api/jobs/{id}`                        | Check background job status                 |
+| `GET`    | `/api/reports/spending-over-time`       | Grocery spending history                    |
+| `GET`    | `/api/reports/top-recipes`              | Top 5 most-used recipes                     |
+| `GET`    | `/api/reports/most-expensive-day`       | Highest-cost meal day                       |
+| `GET`    | `/api/reports/avg-spending-by-category` | Average spending per grocery category       |
 
 ## How It Works
 
 ### Serving Size Scaling
 
-Each recipe stores a base serving count. When generating grocery lists, quantities scale to the week's configured serving size:
+Each recipe stores a base serving count. Serving sizes are configured per meal on the planner. When generating grocery lists, quantities scale from the recipe base to the meal's serving count:
 
-$$Q_{calc} = Q_{base} \times \frac{S_{selected}}{S_{base}}$$
-
-Where $S_{selected} \in \{4, 6\}$ (Boy Week or Girls Week).
+$$Q_{calc} = Q_{base} \times \frac{S_{meal}}{S_{base}}$$
 
 ### Dinner Spinner Weights
 
@@ -184,4 +193,4 @@ meal-planet/
 
 ## License
 
-This project is for personal use.
+This project is released under [The Unlicense](LICENSE) — public domain. Do whatever you want with it.

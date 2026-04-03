@@ -10,6 +10,7 @@ const links = [
   { href: "/planner", label: "Planner", icon: "📅" },
   { href: "/grocery-list", label: "Grocery List", icon: "🛒" },
   { href: "/spinner", label: "Spinner", icon: "🎰" },
+  { href: "/reports", label: "Reports", icon: "📊" },
 ];
 
 export function Navigation() {

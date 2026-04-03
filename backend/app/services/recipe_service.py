@@ -29,6 +29,7 @@ def build_recipe_response(recipe: Recipe) -> RecipeResponse:
         source_url=recipe.source_url,
         image_url=recipe.image_url,
         base_servings=recipe.base_servings,
+        category=recipe.category if recipe.category else "any",
         cost_per_serving=float(recipe.cost_per_serving) if recipe.cost_per_serving else None,
         last_cooked_at=recipe.last_cooked_at,
         created_at=recipe.created_at,

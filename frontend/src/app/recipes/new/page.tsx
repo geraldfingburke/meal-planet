@@ -21,6 +21,7 @@ export default function NewRecipePage() {
   const [imageUrl, setImageUrl] = useState("");
   const [baseServings, setBaseServings] = useState(4);
   const [tags, setTags] = useState("");
+  const [category, setCategory] = useState("any");
   const [ingredients, setIngredients] = useState<IngredientInput[]>([
     { ingredient_name: "", quantity: 1, unit: "" },
   ]);
@@ -59,6 +60,7 @@ export default function NewRecipePage() {
         source_url: sourceUrl || undefined,
         image_url: imageUrl || undefined,
         base_servings: baseServings,
+        category,
         ingredients: ingredients.filter((i) => i.ingredient_name.trim()),
         tags: tags
           .split(",")
@@ -115,6 +117,20 @@ export default function NewRecipePage() {
                 onChange={(e) => setImageUrl(e.target.value)}
                 placeholder="https://example.com/photo.jpg"
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="any">Any</option>
+                <option value="breakfast">Breakfast</option>
+                <option value="lunch">Lunch</option>
+                <option value="dinner">Dinner</option>
+                <option value="dessert">Dessert</option>
+              </select>
             </div>
             <div>
               <label className="text-sm font-medium">

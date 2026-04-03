@@ -7,7 +7,6 @@ from app.schemas.recipe import (
     RecipeResponse,
     RecipeUpdate,
 )
-from app.schemas.week_config import WeekConfigResponse, WeekConfigUpdate
 
 __all__ = [
     "IngredientCreate",
@@ -20,6 +19,4 @@ __all__ = [
     "MealPlanCreate",
     "MealPlanUpdate",
     "MealPlanResponse",
-    "WeekConfigUpdate",
-    "WeekConfigResponse",
 ]

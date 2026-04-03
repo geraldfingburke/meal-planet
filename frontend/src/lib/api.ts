@@ -33,6 +33,7 @@ export interface Recipe {
   source_url: string | null;
   image_url: string | null;
   base_servings: number;
+  category: string;
   cost_per_serving: number | null;
   last_cooked_at: string | null;
   created_at: string;
@@ -46,6 +47,7 @@ export interface RecipeCreateInput {
   source_url?: string;
   image_url?: string;
   base_servings?: number;
+  category?: string;
   ingredients?: {
     ingredient_name: string;
     quantity: number;
@@ -97,6 +99,7 @@ export const api = {
     recipe_id: string;
     planned_date: string;
     meal_type?: string;
+    servings?: number;
   }) =>
     request<MealPlanEntry>("/api/meal-plan", {
       method: "POST",
@@ -104,7 +107,12 @@ export const api = {
     }),
   updateMealPlan: (
     id: string,
-    data: { recipe_id?: string; planned_date?: string; meal_type?: string },
+    data: {
+      recipe_id?: string;
+      planned_date?: string;
+      meal_type?: string;
+      servings?: number;
+    },
   ) =>
     request<MealPlanEntry>(`/api/meal-plan/${id}`, {
       method: "PUT",
@@ -112,13 +120,13 @@ export const api = {
     }),
   deleteMealPlan: (id: string) =>
     request<void>(`/api/meal-plan/${id}`, { method: "DELETE" }),
-
-  // Week Config
-  getWeekConfig: (weekStart: string) =>
-    request<WeekConfig | null>(`/api/week-config?week_start=${weekStart}`),
-  setWeekConfig: (data: { week_start_date: string; week_type: string }) =>
-    request<WeekConfig>("/api/week-config", {
-      method: "PUT",
+  fillWeek: (data: {
+    week_start: string;
+    meal_types: string[];
+    default_servings: number;
+  }) =>
+    request<MealPlanEntry[]>("/api/meal-plan/fill-week", {
+      method: "POST",
       body: JSON.stringify(data),
     }),
 
@@ -131,6 +139,12 @@ export const api = {
         end_date: endDate,
       }),
     }),
+  getLatestGroceryList: () =>
+    request<GroceryList | null>("/api/grocery-list/latest"),
+  getGroceryArchives: () =>
+    request<GroceryArchiveSummary[]>("/api/grocery-list/archives"),
+  getGroceryArchive: (id: string) =>
+    request<GroceryList>(`/api/grocery-list/archives/${id}`),
 
   // Spinner
   spin: (tags?: string) => {
@@ -149,6 +163,17 @@ export const api = {
       status: string;
       result: Record<string, unknown> | null;
     }>(`/api/jobs/${id}`),
+
+  // Reports
+  getSpendingOverTime: () =>
+    request<SpendingEntry[]>("/api/reports/spending-over-time"),
+  getTopRecipes: () => request<TopRecipe[]>("/api/reports/top-recipes"),
+  getMostExpensiveDay: () =>
+    request<{ date: string | null; total_cost: number }>(
+      "/api/reports/most-expensive-day",
+    ),
+  getAvgSpendingByCategory: () =>
+    request<CategorySpending[]>("/api/reports/avg-spending-by-category"),
 };
 
 // ── Types ───────────────────────────────────────────────
@@ -158,13 +183,7 @@ export interface MealPlanEntry {
   recipe_title: string;
   planned_date: string;
   meal_type: string | null;
-}
-
-export interface WeekConfig {
-  id: string;
-  week_start_date: string;
-  week_type: string;
-  serving_override: number;
+  servings: number;
 }
 
 export interface GroceryItem {
@@ -180,18 +199,41 @@ export interface GroceryRecipe {
   cost_per_serving: number | null;
 }
 
-export interface WeekSummary {
-  week_start: string;
-  week_type: string;
-  servings: number;
-}
-
 export interface GroceryList {
+  id?: string;
   start_date: string;
   end_date: string;
-  weeks: WeekSummary[];
   recipes_included: GroceryRecipe[];
   items: GroceryItem[];
   estimated_total: number;
   recipe_cost_total: number;
+  created_at?: string;
+}
+
+export interface GroceryArchiveSummary {
+  id: string;
+  start_date: string;
+  end_date: string;
+  estimated_total: number;
+  created_at: string | null;
+}
+
+export interface SpendingEntry {
+  start_date: string;
+  end_date: string;
+  estimated_total: number;
+  created_at: string | null;
+}
+
+export interface TopRecipe {
+  recipe_id: string;
+  title: string;
+  usage_count: number;
+}
+
+export interface CategorySpending {
+  category: string;
+  avg_spending: number;
+  total_spending: number;
+  list_count: number;
 }

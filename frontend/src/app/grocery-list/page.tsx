@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { api, type GroceryItem, type GroceryList } from "@/lib/api";
+import { useEffect, useState } from "react";
+import {
+  api,
+  type GroceryItem,
+  type GroceryList,
+  type GroceryArchiveSummary,
+} from "@/lib/api";
 import { formatDate, getWeekStart, addDays } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +24,24 @@ export default function GroceryListPage() {
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Archive state
+  const [archives, setArchives] = useState<GroceryArchiveSummary[]>([]);
+  const [showArchives, setShowArchives] = useState(false);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
+  // Load latest list on mount
+  useEffect(() => {
+    async function loadLatest() {
+      try {
+        const latest = await api.getLatestGroceryList();
+        if (latest) setGroceryList(latest);
+      } catch {
+        // No saved list yet, that's fine
+      }
+    }
+    loadLatest();
+  }, []);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -51,11 +74,7 @@ export default function GroceryListPage() {
   const handleSaveAsText = () => {
     if (!groceryList) return;
     const groups = groupByCategory(groceryList.items);
-    let text = `Grocery List -- ${groceryList.start_date} to ${groceryList.end_date}\n`;
-    for (const w of groceryList.weeks) {
-      text += `  ${w.week_start}: ${w.week_type} (${w.servings} servings)\n`;
-    }
-    text += "\n";
+    let text = `Grocery List -- ${groceryList.start_date} to ${groceryList.end_date}\n\n`;
 
     for (const [category, items] of Object.entries(groups)) {
       text += `=== ${category} ===\n`;
@@ -75,7 +94,7 @@ export default function GroceryListPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `grocery-list-${startDate}-to-${endDate}.txt`;
+    a.download = `grocery-list-${groceryList.start_date}-to-${groceryList.end_date}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -102,6 +121,32 @@ export default function GroceryListPage() {
     setEndDate(formatDate(addDays(monday, 6)));
   };
 
+  const handleShowArchives = async () => {
+    if (!showArchives) {
+      try {
+        const data = await api.getGroceryArchives();
+        setArchives(data);
+      } catch (e) {
+        console.error("Failed to load archives:", e);
+      }
+    }
+    setShowArchives(!showArchives);
+  };
+
+  const loadArchive = async (id: string) => {
+    setLoadingArchive(true);
+    setChecked(new Set());
+    try {
+      const data = await api.getGroceryArchive(id);
+      setGroceryList(data);
+      setShowArchives(false);
+    } catch (e) {
+      console.error("Failed to load archive:", e);
+    } finally {
+      setLoadingArchive(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Header */}
@@ -115,7 +160,7 @@ export default function GroceryListPage() {
       {/* Date Range + Generate */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Shopping Range</CardTitle>
+          <CardTitle className="text-base">Generate New List</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
@@ -145,8 +190,7 @@ export default function GroceryListPage() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Servings are set per week via the Boy Week / Girls Week toggle on
-            the Planner page.
+            Servings are determined per meal from the Planner page.
           </p>
           <Button
             onClick={handleGenerate}
@@ -158,36 +202,67 @@ export default function GroceryListPage() {
         </CardContent>
       </Card>
 
+      {/* Archives toggle */}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={handleShowArchives}>
+          {showArchives ? "Hide Older Lists" : "See Older Lists"}
+        </Button>
+      </div>
+
+      {showArchives && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Previous Lists</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {archives.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No archived lists yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {archives.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => loadArchive(a.id)}
+                    disabled={loadingArchive}
+                    className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-sm transition-colors flex justify-between items-center"
+                  >
+                    <span>
+                      {a.start_date} to {a.end_date}
+                    </span>
+                    <span className="text-muted-foreground">
+                      ${a.estimated_total.toFixed(2)}
+                      {a.created_at && (
+                        <span className="ml-2 text-xs">
+                          {new Date(a.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {error && <p className="text-destructive text-sm">{error}</p>}
 
       {/* Results */}
       {groceryList && (
         <>
-          {/* Week breakdown */}
-          {groceryList.weeks.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Weeks ({groceryList.weeks.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {groceryList.weeks.map((w) => (
-                    <div
-                      key={w.week_start}
-                      className="flex justify-between text-sm"
-                    >
-                      <span>Week of {w.week_start}</span>
-                      <span className="text-muted-foreground">
-                        {w.week_type} &middot; {w.servings} servings
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* List header with date range */}
+          <div className="text-sm text-muted-foreground">
+            Showing list for {groceryList.start_date} to {groceryList.end_date}
+            {groceryList.created_at && (
+              <span>
+                {" "}
+                · Generated{" "}
+                {new Date(groceryList.created_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
 
           {/* Recipes included */}
           {groceryList.recipes_included.length > 0 && (

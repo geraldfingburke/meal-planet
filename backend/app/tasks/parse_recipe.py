@@ -50,9 +50,26 @@ async def _parse_and_save(job_id: str, url: str):
                 source_url=parsed.source_url,
                 base_servings=parsed.base_servings,
                 image_url=parsed.image_url,
+                category=parsed.category,
             )
             db.add(recipe)
             await db.flush()
+
+            # Save tags
+            for tag_name in parsed.tags:
+                tag_name = tag_name.strip().lower()
+                if not tag_name:
+                    continue
+                from app.models.recipe import RecipeTag, Tag
+                tag_result = await db.execute(
+                    select(Tag).where(Tag.name == tag_name)
+                )
+                tag = tag_result.scalar_one_or_none()
+                if not tag:
+                    tag = Tag(name=tag_name)
+                    db.add(tag)
+                    await db.flush()
+                db.add(RecipeTag(recipe_id=recipe.id, tag_id=tag.id))
 
             for pi in parsed.ingredients:
                 from sqlalchemy import select

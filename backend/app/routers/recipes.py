@@ -69,6 +69,7 @@ async def create_recipe(data: RecipeCreate, db: AsyncSession = Depends(get_db)):
         instructions=data.instructions,
         source_url=data.source_url,
         base_servings=data.base_servings,
+        category=data.category,
     )
     db.add(recipe)
     await db.flush()
@@ -102,6 +103,8 @@ async def update_recipe(
         recipe.source_url = data.source_url
     if data.base_servings is not None:
         recipe.base_servings = data.base_servings
+    if data.category is not None:
+        recipe.category = data.category
 
     if data.ingredients is not None:
         await upsert_recipe_ingredients(db, recipe.id, data.ingredients)

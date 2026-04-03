@@ -10,10 +10,10 @@ from app.routers import (
     meal_plan,
     recipes,
     spinner,
-    week_config,
 )
 from app.routers import calendar as calendar_router
 from app.routers import jobs as jobs_router
+from app.routers import reports as reports_router
 
 
 @asynccontextmanager
@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
         await conn.execute(
             __import__("sqlalchemy").text(
                 "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS cost_per_serving NUMERIC(10,2)"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS category VARCHAR(20) DEFAULT 'any' NOT NULL"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE meal_plan ADD COLUMN IF NOT EXISTS servings INTEGER DEFAULT 4 NOT NULL"
             )
         )
         # Fix FK constraints to cascade on delete
@@ -69,11 +79,11 @@ app.add_middleware(
 app.include_router(recipes.router, prefix="/api/recipes", tags=["recipes"])
 app.include_router(ingredients.router, prefix="/api/ingredients", tags=["ingredients"])
 app.include_router(meal_plan.router, prefix="/api/meal-plan", tags=["meal-plan"])
-app.include_router(week_config.router, prefix="/api/week-config", tags=["week-config"])
 app.include_router(grocery.router, prefix="/api/grocery-list", tags=["grocery"])
 app.include_router(spinner.router, prefix="/api/spinner", tags=["spinner"])
 app.include_router(calendar_router.router, prefix="/api/calendar", tags=["calendar"])
 app.include_router(jobs_router.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(reports_router.router, prefix="/api/reports", tags=["reports"])
 
 
 @app.get("/health")

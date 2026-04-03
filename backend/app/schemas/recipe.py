@@ -29,6 +29,7 @@ class RecipeCreate(BaseModel):
     source_url: str | None = None
     image_url: str | None = None
     base_servings: int = 4
+    category: str = "any"
     cost_per_serving: float | None = None
     ingredients: list[RecipeIngredientCreate] = []
     tags: list[str] = []
@@ -40,6 +41,7 @@ class RecipeUpdate(BaseModel):
     source_url: str | None = None
     image_url: str | None = None
     base_servings: int | None = None
+    category: str | None = None
     cost_per_serving: float | None = None
     ingredients: list[RecipeIngredientCreate] | None = None
     tags: list[str] | None = None
@@ -52,6 +54,7 @@ class RecipeResponse(BaseModel):
     source_url: str | None = None
     image_url: str | None = None
     base_servings: int
+    category: str = "any"
     cost_per_serving: float | None = None
     last_cooked_at: datetime | None = None
     created_at: datetime
